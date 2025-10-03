@@ -15,3 +15,7 @@ def fetch_waveforms(params):
         params['end_time']
     )
     return stream
+    '''client = Client('IRIS')
+    T = UTCDateTime("2020-01-01T00:00:00")
+    stream = client.get_waveforms("IU", "ANMO", "00", "B HZ", T, T + 60)
+    return stream'''

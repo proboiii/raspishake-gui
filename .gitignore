@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenv
+TAenv/
+TAENV312/
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.7z
+
+# Logs
+logs/
