@@ -1,17 +1,30 @@
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+*.pyd
+*egg-info/
+dist/
+build/
 
-# Virtualenv
+# Environments
 TAenv/
 TAENV312/
 
-# Build artifacts
-build/
-dist/
-*.spec
-*.7z
-
-# Logs
+# Other files and folders
+diferentlenght.py
+get-pip.py
+groupfile.py
+laskdjfdfs.txt
+main.ipynb
+main.py
+PENGOLAHAN.ipynb
+readshake.py
+SeismicSuite_HVSR.py
+sshToSeis.py
+sshToSeisgmn.py
+test_connection.py
+DLGF/
+HVSRpy/
 logs/
+test/
