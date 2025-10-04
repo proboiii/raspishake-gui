@@ -6,12 +6,16 @@ __pycache__/
 *egg-info/
 dist/
 build/
+.env
 
 # Environments
 TAenv/
 TAENV312/
 
 # Other files and folders
+HVSRSuite.7z
+SeismicSuite.spec
+test.py
 diferentlenght.py
 get-pip.py
 groupfile.py
