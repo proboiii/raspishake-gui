@@ -88,8 +88,8 @@ class SeismicSuiteApp:
         self.data_acquisition_tab = ttk.Frame(self.notebook)
         self.multifetch_tab = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.time_sync_tab, text="Time Sync")
-        self.notebook.add(self.data_acquisition_tab, text="Data Acquisition")
+        self.notebook.add(self.time_sync_tab, text="Shake Connection")
+        self.notebook.add(self.data_acquisition_tab, text="Single Fetch")
         self.notebook.add(self.multifetch_tab, text="Multifetch")
 
         # Populate the tabs
@@ -138,7 +138,7 @@ class SeismicSuiteApp:
         ttk.Label(input_frame, text="Password:").grid(row=2, column=0, sticky="w", pady=2)
         self.ts_password_entry = ttk.Entry(input_frame, show="*", width=30)
         self.ts_password_entry.grid(row=2, column=1, sticky="ew", padx=5)
-        self.ts_password_entry.insert(0, "geofisikaitera")
+        self.ts_password_entry.insert(0, "")
         input_frame.columnconfigure(1, weight=1)
 
         button_frame = ttk.Frame(self.time_sync_tab)
