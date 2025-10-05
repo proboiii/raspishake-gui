@@ -64,7 +64,7 @@ class SeismicSuiteApp:
         self.root = root
         self.root.title("Seismic Suite")
         self.root.geometry("850x650")
-        self.shake_communicator = None
+        self.shake_communicator = None 
 
         # Setup logging
         self.setup_logging()
@@ -86,13 +86,16 @@ class SeismicSuiteApp:
         # Create the tabs
         self.time_sync_tab = ttk.Frame(self.notebook)
         self.data_acquisition_tab = ttk.Frame(self.notebook)
+        self.multifetch_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.time_sync_tab, text="Time Sync")
         self.notebook.add(self.data_acquisition_tab, text="Data Acquisition")
+        self.notebook.add(self.multifetch_tab, text="Multifetch")
 
         # Populate the tabs
         self.create_time_sync_tab()
         self.create_data_acquisition_tab()
+        self.create_multifetch_tab()
 
         # Start the queue processor
         self.root.after(100, self.process_queue)
@@ -388,26 +391,72 @@ class SeismicSuiteApp:
         main_frame = ttk.Frame(self.multifetch_tab)
         main_frame.pack(fill="both", expand=True)
 
-        # Top frame for project setup
-        top_frame = ttk.LabelFrame(main_frame, text="Project Setup", padding=(10, 5))
-        top_frame.pack(fill="x", padx=10, pady=10)
+        # --- Top Setup Frame ---
+        setup_frame = ttk.Frame(main_frame)
+        setup_frame.pack(fill="x", padx=10, pady=5)
 
-        ttk.Label(top_frame, text="Project Name:").grid(row=0, column=0, sticky="w", pady=2)
-        self.mf_project_name_entry = ttk.Entry(top_frame, width=30)
-        self.mf_project_name_entry.grid(row=0, column=1, sticky="ew", padx=5)
+        # Project Setup
+        project_frame = ttk.LabelFrame(setup_frame, text="Project Setup", padding=(10, 5))
+        project_frame.pack(fill="x", side="left", expand=True, padx=(0, 5))
+
+        ttk.Label(project_frame, text="Project Name:").grid(row=0, column=0, sticky="w", pady=2)
+        self.mf_project_name_entry = ttk.Entry(project_frame)
+        self.mf_project_name_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=5)
         self.mf_project_name_entry.insert(0, f"Project_{datetime.utcnow().strftime('%Y%m%d')}")
 
-        ttk.Label(top_frame, text="Number of Stations:").grid(row=1, column=0, sticky="w", pady=2)
-        self.mf_station_count_spinbox = ttk.Spinbox(top_frame, from_=1, to=20, width=5)
-        self.mf_station_count_spinbox.grid(row=1, column=1, sticky="w", padx=5)
+        ttk.Label(project_frame, text="Project Directory:").grid(row=1, column=0, sticky="w", pady=2)
+        self.mf_project_dir_entry = ttk.Entry(project_frame)
+        self.mf_project_dir_entry.grid(row=1, column=1, sticky="ew", padx=5)
+        self.mf_project_dir_button = ttk.Button(project_frame, text="Browse...", command=self.select_project_directory)
+        self.mf_project_dir_button.grid(row=1, column=2, sticky="w", padx=5)
         
-        self.mf_set_stations_button = ttk.Button(top_frame, text="Set Stations", command=self.generate_station_inputs)
-        self.mf_set_stations_button.grid(row=1, column=2, padx=5)
+        ttk.Label(project_frame, text="Number of Stations:").grid(row=2, column=0, sticky="w", pady=2)
+        self.mf_station_count_spinbox = ttk.Spinbox(project_frame, from_=1, to=100, width=7)
+        self.mf_station_count_spinbox.grid(row=2, column=1, sticky="w", padx=5)
         
-        top_frame.columnconfigure(1, weight=1)
+        self.mf_set_stations_button = ttk.Button(project_frame, text="Generate Station Inputs", command=self.generate_station_inputs)
+        self.mf_set_stations_button.grid(row=2, column=2, padx=5, pady=5)
+        
+        project_frame.columnconfigure(1, weight=1)
 
-        # Frame to hold the scrollable station inputs
-        canvas_frame = ttk.Frame(main_frame)
+        # --- Connection Details Frame ---
+        conn_frame = ttk.LabelFrame(setup_frame, text="Shake Connection Details", padding=(10, 5))
+        conn_frame.pack(fill="x", side="right", expand=True, padx=(5, 0))
+
+        ttk.Label(conn_frame, text="Host:").grid(row=0, column=0, sticky="w", pady=2)
+        self.mf_host_entry = ttk.Entry(conn_frame)
+        self.mf_host_entry.grid(row=0, column=1, sticky="ew", padx=5)
+        self.mf_host_entry.insert(0, "rs.local")
+
+        ttk.Label(conn_frame, text="Port:").grid(row=1, column=0, sticky="w", pady=2)
+        self.mf_port_entry = ttk.Entry(conn_frame)
+        self.mf_port_entry.grid(row=1, column=1, sticky="ew", padx=5)
+        self.mf_port_entry.insert(0, "16032")
+
+        ttk.Label(conn_frame, text="Network:").grid(row=2, column=0, sticky="w", pady=2)
+        self.mf_net_entry = ttk.Entry(conn_frame)
+        self.mf_net_entry.grid(row=2, column=1, sticky="ew", padx=5)
+        self.mf_net_entry.insert(0, "AM")
+
+        ttk.Label(conn_frame, text="Station:").grid(row=3, column=0, sticky="w", pady=2)
+        self.mf_sta_entry = ttk.Entry(conn_frame)
+        self.mf_sta_entry.grid(row=3, column=1, sticky="ew", padx=5)
+        self.mf_sta_entry.insert(0, "R1E3F")
+
+        ttk.Label(conn_frame, text="Location:").grid(row=4, column=0, sticky="w", pady=2)
+        self.mf_loc_entry = ttk.Entry(conn_frame)
+        self.mf_loc_entry.grid(row=4, column=1, sticky="ew", padx=5)
+        self.mf_loc_entry.insert(0, "00")
+
+        ttk.Label(conn_frame, text="Channel:").grid(row=5, column=0, sticky="w", pady=2)
+        self.mf_cha_entry = ttk.Entry(conn_frame)
+        self.mf_cha_entry.grid(row=5, column=1, sticky="ew", padx=5)
+        self.mf_cha_entry.insert(0, "EH*")
+        
+        conn_frame.columnconfigure(1, weight=1)
+
+        # --- Frame to hold the scrollable station inputs ---
+        canvas_frame = ttk.LabelFrame(main_frame, text="Station Time Windows", padding=(10, 5))
         canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
         self.stations_canvas = tk.Canvas(canvas_frame)
@@ -416,9 +465,7 @@ class SeismicSuiteApp:
 
         self.scrollable_frame.bind(
             "<Configure>",
-            lambda e: self.stations_canvas.configure(
-                scrollregion=self.stations_canvas.bbox("all")
-            )
+            lambda e: self.stations_canvas.configure(scrollregion=self.stations_canvas.bbox("all"))
         )
 
         self.stations_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
@@ -429,90 +476,101 @@ class SeismicSuiteApp:
 
         self.station_widgets = []
 
-        # Bottom frame for controls and output
+        # --- Bottom frame for controls and output ---
         bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.pack(fill="both", expand=True, side="bottom")
+        bottom_frame.pack(fill="x", side="bottom", padx=10, pady=(0, 10))
 
         self.mf_fetch_all_button = ttk.Button(bottom_frame, text="Fetch All Waveforms", command=self.run_multifetch)
-        self.mf_fetch_all_button.pack(pady=10)
+        self.mf_fetch_all_button.pack(pady=5)
 
         output_frame = ttk.LabelFrame(bottom_frame, text="Output", padding=(10, 5))
-        output_frame.pack(padx=10, pady=(0, 10), expand=True, fill="both")
-        self.mf_output_text = scrolledtext.ScrolledText(output_frame, width=70, height=10, wrap=tk.WORD)
+        output_frame.pack(fill="both", expand=True)
+        self.mf_output_text = scrolledtext.ScrolledText(output_frame, height=10, wrap=tk.WORD)
         self.mf_output_text.pack(expand=True, fill="both")
 
+    def select_project_directory(self):
+        directory = filedialog.askdirectory()
+        if directory:
+            self.mf_project_dir_entry.delete(0, tk.END)
+            self.mf_project_dir_entry.insert(0, directory)
+
     def generate_station_inputs(self):
-        # Clear previous widgets
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
         self.station_widgets = []
 
         try:
             num_stations = int(self.mf_station_count_spinbox.get())
-        except ValueError:
-            messagebox.showerror("Input Error", "Number of stations must be an integer.")
+        except (ValueError, tk.TclError):
+            messagebox.showerror("Input Error", "Number of stations must be a valid integer.")
             return
 
         for i in range(num_stations):
-            station_frame = ttk.LabelFrame(self.scrollable_frame, text=f"Station {i+1}")
+            station_frame = ttk.Frame(self.scrollable_frame, padding=5)
             station_frame.pack(fill="x", padx=5, pady=5, expand=True)
             
-            widgets = {}
+            ttk.Label(station_frame, text=f"Station {i+1}:").grid(row=0, column=0, sticky="w")
             
-            # Define fields for each station
-            fields = {
-                "Host": "rs.local", "Port": "16032", "Network": "AM",
-                "Station": f"R{i+1:04d}", "Location": "00", "Channel": "EH*",
-                "Start Time (UTC)": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
-                "End Time (UTC)": (datetime.utcnow() + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S")
-            }
-            
-            row = 0
-            for label, default_val in fields.items():
-                ttk.Label(station_frame, text=label + ":").grid(row=row, column=0, sticky="w", pady=2)
-                
-                if "Time" in label:
-                    time_frame = ttk.Frame(station_frame)
-                    time_frame.grid(row=row, column=1, sticky="ew", padx=5)
-                    entry = ttk.Entry(time_frame, width=25)
-                    entry.pack(side="left", fill="x", expand=True)
-                    btn = ttk.Button(time_frame, text="...", width=3, command=lambda e=entry: self.open_datetime_picker(e))
-                    btn.pack(side="left")
-                else:
-                    entry = ttk.Entry(station_frame, width=30)
-                    entry.grid(row=row, column=1, sticky="ew", padx=5)
+            # Start Time
+            ttk.Label(station_frame, text="Start Time (UTC):").grid(row=0, column=1, sticky="w", padx=(10, 0))
+            start_time_entry = ttk.Entry(station_frame, width=22)
+            start_time_entry.grid(row=0, column=2, sticky="ew")
+            start_btn = ttk.Button(station_frame, text="...", width=3, command=lambda e=start_time_entry: self.open_datetime_picker(e))
+            start_btn.grid(row=0, column=3, padx=5)
 
-                entry.insert(0, default_val)
-                widgets[label.split(' ')[0].lower()] = entry
-                row += 1
-                
-            station_frame.columnconfigure(1, weight=1)
-            self.station_widgets.append(widgets)
+            # End Time
+            ttk.Label(station_frame, text="End Time (UTC):").grid(row=0, column=4, sticky="w", padx=(10, 0))
+            end_time_entry = ttk.Entry(station_frame, width=22)
+            end_time_entry.grid(row=0, column=5, sticky="ew")
+            end_btn = ttk.Button(station_frame, text="...", width=3, command=lambda e=end_time_entry: self.open_datetime_picker(e))
+            end_btn.grid(row=0, column=6, padx=5)
+            
+            now = datetime.utcnow()
+            start_time_entry.insert(0, now.strftime("%Y-%m-%dT%H:%M:%S"))
+            end_time_entry.insert(0, (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S"))
+
+            self.station_widgets.append({"start": start_time_entry, "end": end_time_entry})
+            station_frame.columnconfigure(2, weight=1)
+            station_frame.columnconfigure(5, weight=1)
 
     def run_multifetch(self):
         project_name = self.mf_project_name_entry.get()
-        if not project_name:
-            messagebox.showerror("Input Error", "Project Name is required.")
+        project_dir = self.mf_project_dir_entry.get()
+
+        if not project_name or not project_dir:
+            messagebox.showerror("Input Error", "Project Name and Project Directory are required.")
             return
 
         if not self.station_widgets:
-            messagebox.showerror("Input Error", "Please set the number of stations and their details first.")
+            messagebox.showerror("Input Error", "Please generate station inputs first.")
+            return
+        
+        try:
+            base_params = {
+                "host": self.mf_host_entry.get(), "port": int(self.mf_port_entry.get()),
+                "net": self.mf_net_entry.get(), "sta": self.mf_sta_entry.get(),
+                "loc": self.mf_loc_entry.get(), "cha": self.mf_cha_entry.get(),
+            }
+        except (ValueError, tk.TclError) as e:
+            messagebox.showerror("Input Error", f"Invalid Shake Connection Details: {e}")
             return
 
         all_params = []
         for i, station in enumerate(self.station_widgets):
             try:
-                params = {
-                    "host": station["host"].get(), "port": int(station["port"].get()),
-                    "net": station["network"].get(), "sta": station["station"].get(),
-                    "loc": station["location"].get(), "cha": station["channel"].get(),
-                    "start_time": UTCDateTime(station["start"].get()),
-                    "end_time": UTCDateTime(station["end"].get()),
-                    "station_name": station["station"].get() # For filename
-                }
+                start_time = UTCDateTime(station["start"].get())
+                end_time = UTCDateTime(station["end"].get())
+                
+                # Create a copy of base_params and update it
+                params = base_params.copy()
+                params.update({
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "station_num": i + 1
+                })
                 all_params.append(params)
             except Exception as e:
-                messagebox.showerror("Input Error", f"Invalid input for Station {i+1}: {e}")
+                messagebox.showerror("Input Error", f"Invalid date/time for Station {i+1}: {e}")
                 return
                 
         self.mf_fetch_all_button.config(state="disabled")
@@ -520,36 +578,47 @@ class SeismicSuiteApp:
         self.mf_output_text.insert(tk.INSERT, f"Starting multifetch for project: {project_name}\n")
         logging.info(f"Starting multifetch for project: {project_name}")
         
-        self.start_task(self.multifetch_worker, project_name, all_params)
+        self.start_task(self.multifetch_worker, project_name, project_dir, all_params)
 
-    def multifetch_worker(self, project_name, all_params):
-        # Create project directory
-        project_dir = os.path.join(os.getcwd(), project_name)
-        os.makedirs(project_dir, exist_ok=True)
-        
-        for i, params in enumerate(all_params):
-            station_name = params["station_name"]
-            self.task_queue.put((self.update_mf_output, f"\n--- Fetching Station {i+1}: {station_name} ---\n"))
+    def multifetch_worker(self, project_name, project_dir, all_params):
+        try:
+            if not os.path.exists(project_dir):
+                self.task_queue.put((self.update_mf_output, f"Project directory not found. Please select a valid directory.\n"))
+                return
+            
+            project_path = os.path.join(project_dir, project_name)
+            os.makedirs(project_path, exist_ok=True)
+        except Exception as e:
+            self.task_queue.put((self.handle_error, "Directory Error", f"Could not create project directory: {e}"))
+            return
+
+        for params in all_params:
+            station_num = params["station_num"]
+            self.task_queue.put((self.update_mf_output, f"\n--- Fetching Station {station_num} ---\n"))
             try:
                 stream = fetch_waveforms(params)
-                self.task_queue.put((self.update_mf_output, f"Successfully fetched {len(stream)} traces.\n"))
+                self.task_queue.put((self.update_mf_output, f"  Successfully fetched {len(stream)} traces.\n"))
                 
-                # Save the stream
-                output_file = os.path.join(project_dir, f"{station_name}.mseed")
+                # Create filename: projectname_stationnumber_starttime_endtime.mseed
+                st_str = params['start_time'].strftime('%Y%m%dT%H%M%S')
+                et_str = params['end_time'].strftime('%Y%m%dT%H%M%S')
+                filename = f"{project_name}_{station_num}_{st_str}_to_{et_str}.mseed"
+                output_file = os.path.join(project_path, filename)
+                
                 stream.write(output_file, format="MSEED")
-                self.task_queue.put((self.update_mf_output, f"Saved stream to {output_file}\n"))
-                logging.info(f"Saved stream for station {station_name} to {output_file}")
+                self.task_queue.put((self.update_mf_output, f"  Saved stream to {filename}\n"))
+                logging.info(f"Saved stream for station {station_num} to {output_file}")
                 
             except Exception as e:
-                error_msg = f"Error fetching or saving station {station_name}: {e}\n"
+                error_msg = f"  Error for station {station_num}: {e}\n"
                 self.task_queue.put((self.update_mf_output, error_msg))
-                logging.error(error_msg, exc_info=True)
+                logging.error(f"Error fetching/saving station {station_num}: {e}", exc_info=True)
 
         self.task_queue.put((self.finish_multifetch, "\n--- Multifetch complete! ---\n"))
 
     def update_mf_output(self, text):
         self.mf_output_text.insert(tk.INSERT, text)
-        self.mf_output_text.see(tk.END) # Scroll to end
+        self.mf_output_text.see(tk.END)
 
     def finish_multifetch(self, text):
         self.update_mf_output(text)
