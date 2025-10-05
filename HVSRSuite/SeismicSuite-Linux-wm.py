@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+import keyring
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
@@ -13,6 +15,9 @@ from datetime import datetime, timedelta
 # Import the refactored logic
 from time_sync import ShakeCommunicator
 from data_acquisition import fetch_waveforms
+
+PROFILES_FILE = "profiles.json"
+KEYRING_SERVICE = "SeismicSuite"
 
 class DateTimePicker(tk.Toplevel):
     def __init__(self, parent, entry_widget):
@@ -63,8 +68,10 @@ class SeismicSuiteApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Seismic Suite")
-        self.root.geometry("850x650")
-        self.shake_communicator = None 
+        self.root.geometry("850x750") # Increased height for profile UI
+        self.shake_communicator = None
+        self.profiles = {}
+        self.remember_ssh_var = tk.BooleanVar(value=True)
 
         # Setup logging
         self.setup_logging()
@@ -97,6 +104,9 @@ class SeismicSuiteApp:
         self.create_data_acquisition_tab()
         self.create_multifetch_tab()
 
+        # Load profiles
+        self.load_profiles()
+
         # Start the queue processor
         self.root.after(100, self.process_queue)
         logging.info("Seismic Suite application started.")
@@ -111,7 +121,6 @@ class SeismicSuiteApp:
     def process_queue(self):
         try:
             message = self.task_queue.get_nowait()
-            # Messages are tuples: (function_to_call, *args)
             message[0](*message[1:])
         except queue.Empty:
             pass
@@ -123,10 +132,159 @@ class SeismicSuiteApp:
         thread.daemon = True
         thread.start()
 
-    # --- Time Sync Tab ---
+    # --- Profile Management ---
+    def load_profiles(self):
+        try:
+            if os.path.exists(PROFILES_FILE):
+                with open(PROFILES_FILE, 'r') as f:
+                    self.profiles = json.load(f)
+                self.profile_selector['values'] = list(self.profiles.keys())
+                logging.info(f"Loaded {len(self.profiles)} profiles from {PROFILES_FILE}")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"Error loading profiles: {e}")
+            self.profiles = {}
+
+    def save_profiles_to_file(self):
+        try:
+            with open(PROFILES_FILE, 'w') as f:
+                json.dump(self.profiles, f, indent=4)
+            logging.info(f"Saved profiles to {PROFILES_FILE}")
+        except Exception as e:
+            logging.error(f"Error saving profiles: {e}")
+            messagebox.showerror("Profile Error", f"Could not save profiles to file: {e}")
+
+    def on_profile_select(self, event):
+        profile_name = self.profile_selector.get()
+        if profile_name in self.profiles:
+            profile_data = self.profiles[profile_name]
+            self.update_all_fields(profile_data)
+            
+            # Retrieve password from keyring
+            password = keyring.get_password(KEYRING_SERVICE, profile_name)
+            if password:
+                self.ts_password_entry.delete(0, tk.END)
+                self.ts_password_entry.insert(0, password)
+            logging.info(f"Loaded profile: {profile_name}")
+
+    def update_all_fields(self, data):
+        # Helper to update an entry
+        def _update_entry(entry, value):
+            entry.delete(0, tk.END)
+            entry.insert(0, value)
+
+        # Shake Connection Tab
+        _update_entry(self.ts_host_entry, data.get("ts_host", "rs.local"))
+        _update_entry(self.ts_username_entry, data.get("ts_username", "myshake"))
+
+        # Single Fetch Tab
+        _update_entry(self.da_host_entry, data.get("da_host", "rs.local"))
+        _update_entry(self.da_port_entry, data.get("da_port", "16032"))
+        _update_entry(self.da_net_entry, data.get("da_net", "AM"))
+        _update_entry(self.da_sta_entry, data.get("da_sta", "R1E3F"))
+        _update_entry(self.da_loc_entry, data.get("da_loc", "00"))
+        _update_entry(self.da_cha_entry, data.get("da_cha", "EH*"))
+
+        # Multifetch Tab
+        _update_entry(self.mf_host_entry, data.get("mf_host", "rs.local"))
+        _update_entry(self.mf_port_entry, data.get("mf_port", "16032"))
+        _update_entry(self.mf_net_entry, data.get("mf_net", "AM"))
+        _update_entry(self.mf_sta_entry, data.get("mf_sta", "R1E3F"))
+        _update_entry(self.mf_loc_entry, data.get("mf_loc", "00"))
+        _update_entry(self.mf_cha_entry, data.get("mf_cha", "EH*"))
+
+    def save_profile(self):
+        profile_name = self.profile_name_entry.get()
+        if not profile_name:
+            messagebox.showerror("Input Error", "Profile Name cannot be empty.")
+            return
+
+        profile_data = {
+            "ts_host": self.ts_host_entry.get(),
+            "ts_username": self.ts_username_entry.get(),
+            "da_host": self.da_host_entry.get(),
+            "da_port": self.da_port_entry.get(),
+            "da_net": self.da_net_entry.get(),
+            "da_sta": self.da_sta_entry.get(),
+            "da_loc": self.da_loc_entry.get(),
+            "da_cha": self.da_cha_entry.get(),
+            "mf_host": self.mf_host_entry.get(),
+            "mf_port": self.mf_port_entry.get(),
+            "mf_net": self.mf_net_entry.get(),
+            "mf_sta": self.mf_sta_entry.get(),
+            "mf_loc": self.mf_loc_entry.get(),
+            "mf_cha": self.mf_cha_entry.get(),
+        }
+        self.profiles[profile_name] = profile_data
+
+        if self.remember_ssh_var.get():
+            password = self.ts_password_entry.get()
+            if password:
+                keyring.set_password(KEYRING_SERVICE, profile_name, password)
+                logging.info(f"Saved password for profile '{profile_name}' to keyring.")
+        else:
+            # If user unchecks, delete existing password
+            try:
+                keyring.delete_password(KEYRING_SERVICE, profile_name)
+                logging.info(f"Deleted password for profile '{profile_name}' from keyring.")
+            except keyring.errors.PasswordDeleteError:
+                logging.warning(f"No password found for profile '{profile_name}' to delete.")
+
+        self.save_profiles_to_file()
+        self.profile_selector['values'] = list(self.profiles.keys())
+        self.profile_selector.set(profile_name)
+        messagebox.showinfo("Success", f"Profile '{profile_name}' saved successfully.")
+
+    def delete_profile(self):
+        profile_name = self.profile_selector.get()
+        if not profile_name:
+            messagebox.showerror("Selection Error", "No profile selected to delete.")
+            return
+        
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the profile '{profile_name}'?"):
+            if profile_name in self.profiles:
+                del self.profiles[profile_name]
+                try:
+                    keyring.delete_password(KEYRING_SERVICE, profile_name)
+                    logging.info(f"Deleted password for profile '{profile_name}' from keyring.")
+                except keyring.errors.PasswordDeleteError:
+                    pass # No password was stored, which is fine.
+                
+                self.save_profiles_to_file()
+                self.profile_selector['values'] = list(self.profiles.keys())
+                self.profile_selector.set('')
+                self.profile_name_entry.delete(0, tk.END)
+                messagebox.showinfo("Success", f"Profile '{profile_name}' deleted.")
+
+    # --- Shake Connection Tab ---
     def create_time_sync_tab(self):
+        # --- Profile Management Frame ---
+        profile_frame = ttk.LabelFrame(self.time_sync_tab, text="Profile Management", padding=(10, 5))
+        profile_frame.pack(fill="x", padx=10, pady=(10, 5))
+
+        ttk.Label(profile_frame, text="Select Profile:").grid(row=0, column=0, sticky="w", pady=2)
+        self.profile_selector = ttk.Combobox(profile_frame, state="readonly")
+        self.profile_selector.grid(row=0, column=1, sticky="ew", padx=5)
+        self.profile_selector.bind("<<ComboboxSelected>>", self.on_profile_select)
+
+        ttk.Label(profile_frame, text="New Profile Name:").grid(row=1, column=0, sticky="w", pady=2)
+        self.profile_name_entry = ttk.Entry(profile_frame)
+        self.profile_name_entry.grid(row=1, column=1, sticky="ew", padx=5)
+
+        # --- Controls Frame ---
+        controls_frame = ttk.Frame(profile_frame)
+        controls_frame.grid(row=0, column=2, rowspan=2, sticky="n", padx=5)
+
+        ttk.Button(controls_frame, text="Save Profile", command=self.save_profile).pack(fill="x", pady=2)
+        ttk.Button(controls_frame, text="Delete Selected", command=self.delete_profile).pack(fill="x", pady=2)
+        
+        self.remember_ssh_check = ttk.Checkbutton(controls_frame, text="Remember SSH Credentials", variable=self.remember_ssh_var)
+        self.remember_ssh_check.pack(pady=(5,0))
+        
+        profile_frame.columnconfigure(1, weight=1)
+
+        # --- Connection Details Frame ---
         input_frame = ttk.LabelFrame(self.time_sync_tab, text="Connection Details", padding=(10, 5))
-        input_frame.pack(fill="x", padx=10, pady=10)
+        input_frame.pack(fill="x", padx=10, pady=5)
         ttk.Label(input_frame, text="Host:").grid(row=0, column=0, sticky="w", pady=2)
         self.ts_host_entry = ttk.Entry(input_frame, width=30)
         self.ts_host_entry.grid(row=0, column=1, sticky="ew", padx=5)
@@ -138,7 +296,6 @@ class SeismicSuiteApp:
         ttk.Label(input_frame, text="Password:").grid(row=2, column=0, sticky="w", pady=2)
         self.ts_password_entry = ttk.Entry(input_frame, show="*", width=30)
         self.ts_password_entry.grid(row=2, column=1, sticky="ew", padx=5)
-        self.ts_password_entry.insert(0, "")
         input_frame.columnconfigure(1, weight=1)
 
         button_frame = ttk.Frame(self.time_sync_tab)
@@ -252,7 +409,7 @@ class SeismicSuiteApp:
     def update_ts_status(self, status, color):
         self.ts_status_label.config(text=f"Status: {status}", foreground=color)
 
-    # --- Data Acquisition Tab ---
+    # --- Single Fetch Tab ---
     def create_data_acquisition_tab(self):
         input_frame = ttk.LabelFrame(self.data_acquisition_tab, text="Waveform Parameters", padding=(10, 5))
         input_frame.pack(fill="x", padx=10, pady=10)
@@ -411,7 +568,7 @@ class SeismicSuiteApp:
         self.mf_project_dir_button.grid(row=1, column=2, sticky="w", padx=5)
         
         ttk.Label(project_frame, text="Number of Stations:").grid(row=2, column=0, sticky="w", pady=2)
-        self.mf_station_count_spinbox = ttk.Spinbox(project_frame, from_=1, to=100, width=7)
+        self.mf_station_count_spinbox = ttk.Spinbox(project_frame, from_=1, to=1000, width=7)
         self.mf_station_count_spinbox.grid(row=2, column=1, sticky="w", padx=5)
         
         self.mf_set_stations_button = ttk.Button(project_frame, text="Generate Station Inputs", command=self.generate_station_inputs)
