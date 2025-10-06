@@ -10,7 +10,7 @@ from obspy import UTCDateTime
 import threading
 import queue
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Import the refactored logic
 from time_sync import ShakeCommunicator
@@ -25,7 +25,7 @@ class DateTimePicker(tk.Toplevel):
         self.entry_widget = entry_widget
         self.title("Select Date and Time")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         try:
             dt_str = self.entry_widget.get()
             now = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%S")
@@ -457,7 +457,7 @@ class SeismicSuiteApp:
         end_btn.pack(side="left")
 
         # Set default times
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         start_time = now.strftime("%Y-%m-%dT%H:%M:%S")
         end_time = (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S")
         self.da_start_entry.insert(0, start_time)
@@ -559,7 +559,7 @@ class SeismicSuiteApp:
         ttk.Label(project_frame, text="Project Name:").grid(row=0, column=0, sticky="w", pady=2)
         self.mf_project_name_entry = ttk.Entry(project_frame)
         self.mf_project_name_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=5)
-        self.mf_project_name_entry.insert(0, f"Project_{datetime.utcnow().strftime('%Y%m%d')}")
+        self.mf_project_name_entry.insert(0, f"Project_{datetime.now(timezone.utc).strftime('%Y%m%d')}")
 
         ttk.Label(project_frame, text="Project Directory:").grid(row=1, column=0, sticky="w", pady=2)
         self.mf_project_dir_entry = ttk.Entry(project_frame)
@@ -682,7 +682,7 @@ class SeismicSuiteApp:
             end_btn = ttk.Button(station_frame, text="...", width=3, command=lambda e=end_time_entry: self.open_datetime_picker(e))
             end_btn.grid(row=0, column=6, padx=5)
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             start_time_entry.insert(0, now.strftime("%Y-%m-%dT%H:%M:%S"))
             end_time_entry.insert(0, (now + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S"))
 
