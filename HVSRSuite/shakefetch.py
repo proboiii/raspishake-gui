@@ -17,7 +17,7 @@ from time_sync import ShakeCommunicator
 from data_acquisition import fetch_waveforms
 
 PROFILES_FILE = "profiles.json"
-KEYRING_SERVICE = "SeismicSuite"
+KEYRING_SERVICE = "ShakeFetch"
 
 class DateTimePicker(tk.Toplevel):
     def __init__(self, parent, entry_widget):
@@ -64,10 +64,10 @@ class DateTimePicker(tk.Toplevel):
         self.entry_widget.insert(0, dt_str)
         self.destroy()
 
-class SeismicSuiteApp:
+class ShakeFetchApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Seismic Suite")
+        self.root.title("ShakeFetch")
         self.root.geometry("850x750") # Increased height for profile UI
         self.shake_communicator = None
         self.profiles = {}
@@ -109,12 +109,12 @@ class SeismicSuiteApp:
 
         # Start the queue processor
         self.root.after(100, self.process_queue)
-        logging.info("Seismic Suite application started.")
+        logging.info("ShakeFetch application started.")
 
     def setup_logging(self):
         if not os.path.exists("logs"):
             os.makedirs("logs")
-        logging.basicConfig(filename="logs/seismicsuite.log",
+        logging.basicConfig(filename="logs/shakefetch.log",
                             level=logging.INFO,
                             format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -512,7 +512,7 @@ class SeismicSuiteApp:
         output_file = filedialog.asksaveasfilename(defaultextension=".mseed", filetypes=[("MSEED files", "*.mseed")])
         if output_file:
             try:
-                self.stream.write(output_file, format="MSEED")
+                self.stream.write(output_file, format="MSEED",)
                 self.da_output_text.insert(tk.INSERT, f"Stream saved to {output_file}\n")
                 logging.info(f"Stream successfully saved to {output_file}")
             except Exception as e:
@@ -784,5 +784,5 @@ class SeismicSuiteApp:
 
 if __name__ == "__main__":
     root = ThemedTk(theme="arc")
-    app = SeismicSuiteApp(root)
+    app = ShakeFetchApp(root)
     root.mainloop()
