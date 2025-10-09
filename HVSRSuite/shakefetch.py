@@ -1,3 +1,5 @@
+import hvsrpy
+from hvsrpy import sesame
 import sys
 import os
 import json
@@ -11,10 +13,12 @@ import threading
 import queue
 import logging
 from datetime import datetime, timedelta, timezone
+import numpy as np
 
 # Import the refactored logic
 from time_sync import ShakeCommunicator
 from data_acquisition import fetch_waveforms
+from mhvsr_logic import process_mhvsr, get_default_preprocessing_settings, get_default_processing_settings
 
 PROFILES_FILE = "profiles.json"
 KEYRING_SERVICE = "ShakeFetch"
@@ -94,15 +98,18 @@ class ShakeFetchApp:
         self.time_sync_tab = ttk.Frame(self.notebook)
         self.data_acquisition_tab = ttk.Frame(self.notebook)
         self.multifetch_tab = ttk.Frame(self.notebook)
+        self.mhvsr_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.time_sync_tab, text="Shake Connection")
         self.notebook.add(self.data_acquisition_tab, text="Single Fetch")
         self.notebook.add(self.multifetch_tab, text="Multifetch")
+        self.notebook.add(self.mhvsr_tab, text="MHVSR Analysis")
 
         # Populate the tabs
         self.create_time_sync_tab()
         self.create_data_acquisition_tab()
         self.create_multifetch_tab()
+        self.create_mhvsr_tab()
 
         # Load profiles
         self.load_profiles()
@@ -530,6 +537,7 @@ class ShakeFetchApp:
 
     def handle_error(self, title, error):
         messagebox.showerror(title, str(error))
+        self.run_mhvsr_button.config(state="normal")
         if title == "Connection Error":
             self.connect_button.config(state="normal")
             self.update_ts_status("Failed", "red")
@@ -780,6 +788,170 @@ class ShakeFetchApp:
     def finish_multifetch(self, text):
         self.update_mf_output(text)
         self.mf_fetch_all_button.config(state="normal")
+
+    # --- MHVSR Analysis Tab ---
+    def create_mhvsr_tab(self):
+        main_frame = ttk.Frame(self.mhvsr_tab)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Top Frame ---
+        top_frame = ttk.Frame(main_frame)
+        top_frame.pack(fill="x", pady=5)
+
+        # --- File Selection ---
+        file_frame = ttk.LabelFrame(top_frame, text="Input Files", padding=(10, 5))
+        file_frame.pack(fill="x", expand=True, side="left", padx=(0, 5))
+
+        self.mhvsr_files = []
+        self.mhvsr_file_list_var = tk.StringVar(value="No files selected.")
+        ttk.Label(file_frame, text="Selected Files:").pack(side="left", padx=5)
+        ttk.Label(file_frame, textvariable=self.mhvsr_file_list_var, wraplength=300).pack(side="left", expand=True, fill="x", padx=5)
+        ttk.Button(file_frame, text="Select Files", command=self.select_mhvsr_files).pack(side="right", padx=5)
+
+        # --- Parameters ---
+        param_frame = ttk.LabelFrame(top_frame, text="HVSR Parameters", padding=(10, 5))
+        param_frame.pack(fill="x", expand=True, side="right", padx=(5, 0))
+
+        ttk.Label(param_frame, text="Window Length (s):").grid(row=0, column=0, sticky="w", pady=2)
+        self.mhvsr_window_length = tk.StringVar(value="150")
+        ttk.Spinbox(param_frame, from_=1, to=1000, width=7, textvariable=self.mhvsr_window_length).grid(row=0, column=1, sticky="w", padx=5)
+
+        ttk.Label(param_frame, text="Bandwidth:").grid(row=1, column=0, sticky="w", pady=2)
+        self.mhvsr_bandwidth = tk.StringVar(value="40")
+        ttk.Spinbox(param_frame, from_=1, to=100, width=7, textvariable=self.mhvsr_bandwidth).grid(row=1, column=1, sticky="w", padx=5)
+
+        ttk.Label(param_frame, text="Combine Horizontals:").grid(row=2, column=0, sticky="w", pady=2)
+        self.mhvsr_combine_method = tk.StringVar(value="geometric_mean")
+        combine_options = ["geometric_mean", "squared_average", "azimuth", "single_azimuth"]
+        ttk.Combobox(param_frame, textvariable=self.mhvsr_combine_method, values=combine_options, state="readonly").grid(row=2, column=1, sticky="ew", padx=5)
+
+        # --- Analysis and Output ---
+        analysis_frame = ttk.Frame(main_frame)
+        analysis_frame.pack(fill="both", expand=True, pady=5)
+
+        # --- Controls ---
+        control_frame = ttk.Frame(analysis_frame)
+        control_frame.pack(fill="x")
+
+        self.run_mhvsr_button = ttk.Button(control_frame, text="Run MHVSR Analysis", command=self.run_mhvsr_analysis)
+        self.run_mhvsr_button.pack(side="left", padx=5)
+
+        self.plot_mhvsr_button = ttk.Button(control_frame, text="Plot Results", command=self.plot_mhvsr_results, state="disabled")
+        self.plot_mhvsr_button.pack(side="left", padx=5)
+
+        self.save_mhvsr_button = ttk.Button(control_frame, text="Save Results", command=self.save_mhvsr_results, state="disabled")
+        self.save_mhvsr_button.pack(side="left", padx=5)
+
+        # --- Output ---
+        output_frame = ttk.LabelFrame(analysis_frame, text="Output", padding=(10, 5))
+        output_frame.pack(fill="both", expand=True, pady=5)
+
+        self.mhvsr_output_text = scrolledtext.ScrolledText(output_frame, height=10, wrap=tk.WORD)
+        self.mhvsr_output_text.pack(expand=True, fill="both")
+
+        self.hvsr_result = None
+
+    def select_mhvsr_files(self):
+        files = filedialog.askopenfilenames(title="Select MSEED/MiniSEED Files", filetypes=[("MSEED/MiniSEED files", "*.mseed *.miniseed"), ("All files", "*.*")])
+        if files:
+            self.mhvsr_files = files
+            self.mhvsr_file_list_var.set(f"{len(files)} files selected.")
+
+    def run_mhvsr_analysis(self):
+        if not self.mhvsr_files:
+            messagebox.showerror("Input Error", "Please select input files first.")
+            return
+
+        self.run_mhvsr_button.config(state="disabled")
+        self.plot_mhvsr_button.config(state="disabled")
+        self.save_mhvsr_button.config(state="disabled")
+        self.mhvsr_output_text.delete('1.0', tk.END)
+        self.mhvsr_output_text.insert(tk.INSERT, "Running MHVSR analysis...\n")
+
+        self.start_task(self.mhvsr_worker)
+
+    def mhvsr_worker(self):
+        try:
+            window_length = int(self.mhvsr_window_length.get())
+            bandwidth = int(self.mhvsr_bandwidth.get())
+            combine_method = self.mhvsr_combine_method.get()
+
+            preprocessing_settings = get_default_preprocessing_settings()
+            preprocessing_settings.window_length_in_seconds = window_length
+
+            processing_settings = get_default_processing_settings()
+            processing_settings.smoothing['bandwidth'] = bandwidth
+            processing_settings.method_to_combine_horizontals = combine_method
+
+            hvsr = process_mhvsr([list(self.mhvsr_files)], preprocessing_settings, processing_settings)
+            self.task_queue.put((self.on_mhvsr_complete, hvsr))
+        except Exception as e:
+            self.task_queue.put((self.handle_error, "MHVSR Error", e))
+
+    def on_mhvsr_complete(self, hvsr):
+        self.hvsr_result = hvsr
+        self.mhvsr_output_text.insert(tk.INSERT, "MHVSR analysis complete.\n")
+        self.run_mhvsr_button.config(state="normal")
+        self.plot_mhvsr_button.config(state="normal")
+        self.save_mhvsr_button.config(state="normal")
+
+        # Display summary
+        import io
+        from contextlib import redirect_stdout
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            hvsr.update_peaks_bounded(search_range_in_hz=(None, None))
+            print("\nSESAME (2004) Clarity and Reliability Criteria:")
+            print("-"*47)
+            hvsrpy.sesame.reliability(
+                windowlength=int(self.mhvsr_window_length.get()),
+                passing_window_count=np.sum(hvsr.valid_window_boolean_mask),
+                frequency=hvsr.frequency,
+                mean_curve=hvsr.mean_curve(distribution="lognormal"),
+                std_curve=hvsr.std_curve(distribution="lognormal"),
+                search_range_in_hz=(None, None),
+                verbose=1,
+            )
+            hvsrpy.sesame.clarity(
+                frequency=hvsr.frequency,
+                mean_curve=hvsr.mean_curve(distribution="lognormal"),
+                std_curve=hvsr.std_curve(distribution="lognormal"),
+                fn_std=hvsr.std_fn_frequency(distribution="normal"),
+                search_range_in_hz=(None, None),
+                verbose=1,
+            )
+            print("\nStatistical Summary:")
+            print("-"*20)
+            hvsrpy.summarize_hvsr_statistics(hvsr)
+        s = f.getvalue()
+        self.mhvsr_output_text.insert(tk.INSERT, s)
+
+
+    def plot_mhvsr_results(self):
+        if self.hvsr_result:
+            import matplotlib.pyplot as plt
+            fig, ax = hvsrpy.plot_single_panel_hvsr_curves(self.hvsr_result)
+            ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+            fig.tight_layout(rect=[0, 0, 0.85, 1])
+            plt.show()
+        else:
+            messagebox.showinfo("No Data", "No MHVSR results to plot. Please run the analysis first.")
+
+    def save_mhvsr_results(self):
+        if self.hvsr_result:
+            output_file = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+            if output_file:
+                try:
+                    hvsrpy.object_io.write_hvsr_object_to_file(self.hvsr_result, output_file)
+                    self.mhvsr_output_text.insert(tk.INSERT, f"\nResults saved to {output_file}\n")
+                    logging.info(f"MHVSR results successfully saved to {output_file}")
+                except Exception as e:
+                    logging.error(f"Failed to save MHVSR results to {output_file}: {e}", exc_info=True)
+                    messagebox.showerror("File Save Error", f"Failed to save file: {e}")
+        else:
+            messagebox.showinfo("No Data", "No MHVSR results to save. Please run the analysis first.")
+
 
 
 if __name__ == "__main__":
