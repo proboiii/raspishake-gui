@@ -2,6 +2,7 @@ import sys
 import os
 import hvsrpy
 from hvsrpy import sesame
+import obspy
 
 # Determine the base directory, whether running as a script or as a frozen exe
 # if getattr(sys, 'frozen', False):

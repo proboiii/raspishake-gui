@@ -11,6 +11,7 @@ TAENV312/
 # Build artifacts
 build/
 dist/
+shakefetch/shakefetch.dist
 *.egg-info/
 
 # Logs
